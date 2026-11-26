@@ -4,12 +4,21 @@ const $ = (selector) => document.querySelector(selector);
 const audio = $('#audio');
 const reading = $('#reading');
 const select = $('#chapterSelect');
+const player = $('#player');
 let bookData;
 let currentChapter;
+let playbackChapter;
 let currentTrack;
 let currentObjectURL;
 let chapterList = [];
 let downloading = false;
+let installPrompt = null;
+let chapterPauseTimer = null;
+let pauseDueToChapter = false;
+let wantsPlayback = false;
+let activeWordNode = null;
+let playerCollapsed = localStorage.getItem('imitatio-player-collapsed-v1') === 'true';
+const SAVED_MARKS_KEY = 'imitatio-saved-marks-v1';
 
 function keyFor(chapter) { return `${chapter.bookNumber}-${chapter.chapter}`; }
 function formatTime(seconds) {
@@ -87,10 +96,15 @@ function initializeBook(data) {
     reading.append(section);
   });
   currentChapter = chapterList[0];
+  playbackChapter = currentChapter;
   currentTrack = data.tracks.find(track => track.id === currentChapter.track);
   select.value = keyFor(currentChapter);
   setTrackSource(currentTrack, false);
   updateLocation();
+  player.classList.toggle('is-collapsed', playerCollapsed);
+  document.body.classList.toggle('player-collapsed', playerCollapsed);
+  $('#playerSizeButton').textContent = playerCollapsed ? '⌃' : '⌄';
+  $('#playerSizeButton').setAttribute('aria-label', playerCollapsed ? 'Expand player' : 'Collapse player');
   document.querySelectorAll('.chapter-section').forEach(section => sectionObserver.observe(section));
   refreshOfflineStatus();
 }
@@ -98,8 +112,21 @@ function initializeBook(data) {
 function trackForChapter(chapter) { return bookData.tracks.find(track => track.id === chapter.track); }
 function wordsForTrack(trackId) { return chapterList.filter(ch => ch.track === trackId); }
 function updateLocation() {
-  $('#playerLocation').textContent = `Liber ${currentChapter.book} · Caput ${currentChapter.chapter}`;
+  const location = playbackChapter || currentChapter;
+  $('#playerLocation strong').textContent = `Liber ${location.book} · Caput ${location.chapter}`;
   select.value = keyFor(currentChapter);
+  updateProgress(location, 0);
+  const chapterIndex = chapterList.findIndex(ch => keyFor(ch) === keyFor(location));
+  $('#previousButton').disabled = chapterIndex <= 0;
+  $('#nextButton').disabled = chapterIndex < 0 || chapterIndex >= chapterList.length - 1;
+}
+function updateProgress(chapter, wordIndex = 0) {
+  if (!bookData || !chapter) return;
+  const total = chapterList.reduce((sum, item) => sum + Math.max(1, item.words?.length || 1), 0);
+  const before = chapterList.slice(0, chapterList.findIndex(item => keyFor(item) === keyFor(chapter)))
+    .reduce((sum, item) => sum + Math.max(1, item.words?.length || 1), 0);
+  const amount = Math.min(Math.max(wordIndex, 0), Math.max(0, (chapter.words?.length || 1) - 1));
+  $('#progressPercent').textContent = `${Math.min(100, Math.max(1, Math.round((before + amount) / total * 100)))}%`;
 }
 function updateCurrentChapter(chapter, shouldScroll = false) {
   if (!chapter) return;
@@ -107,8 +134,26 @@ function updateCurrentChapter(chapter, shouldScroll = false) {
   updateLocation();
   if (shouldScroll) document.getElementById(`chapter-${keyFor(chapter)}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+function chapterBounds(chapter = playbackChapter || currentChapter) {
+  const start = Math.max(0, Number(chapter?.start) || 0);
+  const end = Number(chapter?.end);
+  return { start, end: Number.isFinite(end) && end > start ? end : (audio.duration || start + 1) };
+}
+function cancelChapterPause() {
+  if (chapterPauseTimer !== null) clearTimeout(chapterPauseTimer);
+  chapterPauseTimer = null;
+  pauseDueToChapter = false;
+}
+function skipBy(seconds) {
+  const shouldResume = wantsPlayback;
+  cancelChapterPause();
+  const { start, end } = chapterBounds();
+  audio.currentTime = Math.min(Math.max(audio.currentTime + seconds, start), end);
+  if (shouldResume && audio.paused) audio.play().catch(showPlaybackError);
+}
 function setTrackSource(track, seekStart = true, autoplay = false) {
-  const playing = !audio.paused;
+  cancelChapterPause();
+  const playing = wantsPlayback || !audio.paused;
   const previousTime = audio.currentTime;
   currentTrack = track;
   audio.pause();
@@ -132,9 +177,11 @@ function setTrackSource(track, seekStart = true, autoplay = false) {
     });
   }).catch(showPlaybackError);
 }
-function navigateTo(chapter, autoplay = !audio.paused) {
+function navigateTo(chapter, autoplay = wantsPlayback) {
   if (!chapter) return;
+  cancelChapterPause();
   const oldTrackID = currentTrack?.id;
+  playbackChapter = chapter;
   updateCurrentChapter(chapter, true);
   const targetTrack = trackForChapter(chapter);
   if (oldTrackID !== targetTrack.id) {
@@ -159,14 +206,27 @@ function setActiveWord(chapter, seconds) {
     else high = mid - 1;
   }
   while (found >= 0 && words[found].end != null && seconds > words[found].end) found--;
-  document.querySelectorAll('.word.current').forEach(node => node.classList.remove('current'));
   if (found < 0) return;
   let candidate = words[found];
   if (candidate.start == null || candidate.end == null || seconds > candidate.end + 0.8) {
     candidate = words.slice(0, found + 1).reverse().find(word => word.start != null && word.end != null && seconds >= word.start && seconds <= word.end + 0.8);
   }
   if (!candidate) return;
-  document.querySelector(`#chapter-${chapter.bookNumber}-${chapter.chapter} .word[data-word-index="${candidate.wordIndex}"]`)?.classList.add('current');
+  const node = document.querySelector(`#chapter-${chapter.bookNumber}-${chapter.chapter} .word[data-word-index="${candidate.wordIndex}"]`);
+  if (!node) return;
+  if (node !== activeWordNode) {
+    activeWordNode?.classList.remove('current');
+    node.classList.add('current');
+    activeWordNode = node;
+  }
+  const topbarHeight = document.querySelector('.topbar').getBoundingClientRect().bottom;
+  const playerHeight = playerCollapsed ? 70 : 245;
+  const rect = node.getBoundingClientRect();
+  if ((!audio.paused || pauseDueToChapter) &&
+      (rect.top < topbarHeight + 10 || rect.bottom > window.innerHeight - playerHeight - 10)) {
+    node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  updateProgress(chapter, found);
 }
 function chapterAtTime(track, seconds) {
   const chapters = wordsForTrack(track.id);
@@ -177,12 +237,62 @@ const sectionObserver = new IntersectionObserver(entries => {
   const visible = entries.filter(e => e.isIntersecting).sort((a,b) => a.boundingClientRect.top-b.boundingClientRect.top)[0];
   if (!visible) return;
   const chapter = bookData?.chapters[visible.target.dataset.chapterKey];
-  if (chapter) updateCurrentChapter(chapter, false);
+  if (chapter) {
+    currentChapter = chapter;
+    select.value = keyFor(chapter);
+  }
 }, { rootMargin: '-12% 0px -72% 0px' });
 
-select.addEventListener('change', () => navigateTo(bookData.chapters[select.value], !audio.paused));
+select.addEventListener('change', () => {
+  navigateTo(bookData.chapters[select.value], wantsPlayback);
+  $('#contentsDialog').close();
+});
+$('#contentsButton').addEventListener('click', () => $('#contentsDialog').showModal());
+function savedMarks() { try { return JSON.parse(localStorage.getItem(SAVED_MARKS_KEY) || '[]'); } catch { return []; } }
+function renderMarks() {
+  const list = $('#marksList'); list.replaceChildren();
+  const marks = savedMarks();
+  if (!marks.length) { list.textContent = 'No bookmarks saved yet.'; return; }
+  marks.forEach(mark => {
+    const button = document.createElement('button'); button.className = 'saved-mark';
+    button.textContent = `Liber ${mark.book} · Caput ${mark.chapter} · ${formatTime(mark.time)}`;
+    button.addEventListener('click', () => {
+      const chapter = bookData.chapters[`${mark.book}-${mark.chapter}`];
+      if (chapter) {
+        const targetTrack = trackForChapter(chapter);
+        if (currentTrack?.id === targetTrack.id) { navigateTo(chapter, false); audio.currentTime = mark.time; }
+        else { audio.addEventListener('loadedmetadata', () => { audio.currentTime = mark.time; }, { once: true }); navigateTo(chapter, false); }
+      }
+      $('#marksDialog').close();
+    });
+    list.append(button);
+  });
+}
+$('#marksButton').addEventListener('click', () => { renderMarks(); $('#marksDialog').showModal(); });
+$('#saveBookmark').addEventListener('click', () => {
+  const marks = savedMarks(); marks.push({ book: currentChapter.bookNumber, chapter: currentChapter.chapter, time: audio.currentTime || currentChapter.start || 0, savedAt: Date.now() });
+  localStorage.setItem(SAVED_MARKS_KEY, JSON.stringify(marks)); renderMarks();
+});
+$('#offlineButton').addEventListener('click', () => {
+  $('#contentsDialog').close();
+  estimateStorage();
+  $('#downloadDialog').showModal();
+});
+$('#installButton').addEventListener('click', () => {
+  $('#contentsDialog').close();
+  $('#installDialog').showModal();
+});
+window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); installPrompt = event; $('#installNow').hidden = false; });
+$('#installNow').addEventListener('click', async () => { if (!installPrompt) return; installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; $('#installDialog').close(); });
+window.addEventListener('appinstalled', () => { $('#installButton').textContent = 'App installed'; $('#installNow').hidden = true; });
 $('#playButton').addEventListener('click', async () => {
   if (audio.paused) {
+    if (chapterPauseTimer !== null) {
+      cancelChapterPause();
+      wantsPlayback = false;
+      $('#playButton').textContent = '▶';
+      return;
+    }
     const targetTrack = trackForChapter(currentChapter);
     const chapterPositionIsCurrent = currentTrack?.id === targetTrack.id &&
       audio.currentTime >= currentChapter.start && audio.currentTime < currentChapter.end;
@@ -193,28 +303,87 @@ $('#playButton').addEventListener('click', async () => {
     }
     try { await audio.play(); $('#playButton').textContent = 'Ⅱ'; }
     catch (error) { showPlaybackError(error); }
-  } else { audio.pause(); $('#playButton').textContent = '▶'; }
+  } else { cancelChapterPause(); wantsPlayback = false; audio.pause(); $('#playButton').textContent = '▶'; }
 });
-$('#previousButton').addEventListener('click', () => navigateTo(chapterList[Math.max(0, chapterList.findIndex(ch => keyFor(ch) === keyFor(currentChapter)) - 1)]));
-$('#nextButton').addEventListener('click', () => navigateTo(chapterList[Math.min(chapterList.length - 1, chapterList.findIndex(ch => keyFor(ch) === keyFor(currentChapter)) + 1)]));
-audio.addEventListener('play', () => { $('#playButton').textContent = 'Ⅱ'; });
-audio.addEventListener('pause', () => { $('#playButton').textContent = '▶'; });
+$('#playerSizeButton').addEventListener('click', () => {
+  playerCollapsed = !playerCollapsed;
+  player.classList.toggle('is-collapsed', playerCollapsed);
+  document.body.classList.toggle('player-collapsed', playerCollapsed);
+  $('#playerSizeButton').textContent = playerCollapsed ? '⌃' : '⌄';
+  $('#playerSizeButton').setAttribute('aria-label', playerCollapsed ? 'Expand player' : 'Collapse player');
+  localStorage.setItem('imitatio-player-collapsed-v1', String(playerCollapsed));
+  if (activeWordNode) setActiveWord(playbackChapter, audio.currentTime);
+});
+$('#back15Button').addEventListener('click', () => skipBy(-15));
+$('#forward15Button').addEventListener('click', () => skipBy(15));
+$('#returnToCurrentButton').addEventListener('click', () => {
+  const target = activeWordNode || document.getElementById(`chapter-${keyFor(playbackChapter || currentChapter)}`);
+  target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+$('#previousButton').addEventListener('click', () => {
+  const index = chapterList.findIndex(ch => keyFor(ch) === keyFor(playbackChapter || currentChapter));
+  navigateTo(chapterList[Math.max(0, index - 1)]);
+});
+$('#nextButton').addEventListener('click', () => {
+  const index = chapterList.findIndex(ch => keyFor(ch) === keyFor(playbackChapter || currentChapter));
+  navigateTo(chapterList[Math.min(chapterList.length - 1, index + 1)]);
+});
+audio.addEventListener('play', () => { wantsPlayback = true; $('#playButton').textContent = 'Ⅱ'; });
+audio.addEventListener('pause', () => {
+  if (!pauseDueToChapter) { wantsPlayback = false; $('#playButton').textContent = '▶'; }
+});
+audio.addEventListener('seeking', () => {
+  if (currentTrack) playbackChapter = chapterAtTime(currentTrack, audio.currentTime);
+});
 audio.addEventListener('timeupdate', () => {
   const chapter = chapterAtTime(currentTrack, audio.currentTime);
-  if (chapter && keyFor(chapter) !== keyFor(currentChapter)) updateCurrentChapter(chapter, false);
-  if (chapter) setActiveWord(chapter, audio.currentTime);
-  $('#timeLabel').textContent = formatTime(audio.currentTime);
-  if (Number.isFinite(audio.duration) && audio.duration > 0) {
-    $('#durationLabel').textContent = formatTime(audio.duration);
-    $('#seekBar').value = String(Math.round(audio.currentTime / audio.duration * 1000));
+  if (chapter && keyFor(chapter) !== keyFor(playbackChapter || currentChapter)) {
+    const previous = playbackChapter;
+    const crossedChapterWhilePlaying = !audio.paused && previous &&
+      previous.track === chapter.track && chapter.chapter > previous.chapter;
+    playbackChapter = chapter;
+    currentChapter = chapter;
+    select.value = keyFor(chapter);
+    updateLocation();
+    if (crossedChapterWhilePlaying && chapterPauseTimer === null) {
+      wantsPlayback = true;
+      pauseDueToChapter = true;
+      audio.pause();
+      chapterPauseTimer = setTimeout(() => {
+        chapterPauseTimer = null;
+        if (!pauseDueToChapter || currentTrack?.id !== chapter.track) return;
+        pauseDueToChapter = false;
+        if (wantsPlayback) audio.play().catch(showPlaybackError);
+      }, 3000);
+    }
   }
+  if (chapter) setActiveWord(chapter, audio.currentTime);
+  if (!chapter) return;
+  const { start, end } = chapterBounds(chapter);
+  $('#timeLabel').textContent = formatTime(Math.max(0, audio.currentTime - start));
+  $('#durationLabel').textContent = formatTime(Math.max(0, end - start));
+  $('#seekBar').value = String(Math.round(Math.min(1, Math.max(0, (audio.currentTime - start) / Math.max(1, end - start))) * 1000));
 });
 audio.addEventListener('ended', () => {
-  const index = chapterList.findIndex(ch => keyFor(ch) === keyFor(currentChapter));
-  if (index < chapterList.length - 1) navigateTo(chapterList[index + 1], true);
+  const index = chapterList.findIndex(ch => keyFor(ch) === keyFor(playbackChapter || currentChapter));
+  if (index < chapterList.length - 1 && chapterPauseTimer === null) {
+    wantsPlayback = true;
+    pauseDueToChapter = true;
+    chapterPauseTimer = setTimeout(() => {
+      chapterPauseTimer = null;
+      if (!pauseDueToChapter) return;
+      pauseDueToChapter = false;
+      if (wantsPlayback) navigateTo(chapterList[index + 1], true);
+    }, 3000);
+  }
 });
 $('#seekBar').addEventListener('input', event => {
-  if (Number.isFinite(audio.duration)) audio.currentTime = Number(event.target.value) / 1000 * audio.duration;
+  cancelChapterPause();
+  const { start, end } = chapterBounds();
+  audio.currentTime = start + Number(event.target.value) / 1000 * (end - start);
+});
+$('#seekBar').addEventListener('change', () => {
+  if (wantsPlayback && audio.paused) audio.play().catch(showPlaybackError);
 });
 
 async function refreshOfflineStatus() {
@@ -240,7 +409,6 @@ function estimateStorage() {
     note.textContent = `About ${Math.round(freeMB)} MB browser storage available. This download uses about 405 MB.`;
   }).catch(() => { note.textContent = 'This device must have about 405 MB free. Browser storage limits vary.'; });
 }
-$('#offlineButton').addEventListener('click', () => { estimateStorage(); $('#downloadDialog').showModal(); });
 $('#startDownload').addEventListener('click', async () => {
   if (downloading) return;
   downloading = true;
