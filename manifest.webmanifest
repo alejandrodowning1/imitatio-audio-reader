@@ -1,0 +1,10 @@
+{
+  "name": "Imitatio — De imitatione Christi",
+  "short_name": "Imitatio",
+  "description": "Read and listen to De imitatione Christi in Latin.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f1e8",
+  "theme_color": "#f5f1e8",
+  "icons": [{"src":"icon.png","sizes":"180x180","type":"image/png","purpose":"any"}]
+}
