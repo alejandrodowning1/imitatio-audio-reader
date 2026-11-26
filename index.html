@@ -4,59 +4,37 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f5f1e8">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Imitatio">
-  <meta name="description" content="Read De imitatione Christi while listening to its LibriVox recording, with synchronized Latin highlighting.">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="apple-touch-icon" href="icon.png">
-  <link rel="stylesheet" href="style.css">
-  <title>Imitatio · De imitatione Christi</title>
+  <title>Install Imitatio</title>
+  <style>
+    :root{color-scheme:light;--paper:#f5f1e8;--ink:#26251f;--muted:#716d63;--line:#d9d3c6;--accent:#253f63;--serif:Georgia,"Times New Roman",serif;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    *{box-sizing:border-box}body{margin:0;min-height:100svh;background:var(--paper);color:var(--ink);font-family:var(--sans);display:grid;place-items:center;padding:calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom))}
+    main{width:min(100%,520px)}h1{text-align:center;font:600 30px/1.15 var(--serif);letter-spacing:-.02em;margin:0 0 8px}.subtitle{text-align:center;font:500 11px var(--serif);letter-spacing:.16em;color:var(--accent);margin:0 0 28px}
+    section{border-top:1px solid var(--line);padding:21px 2px 19px}h2{font:600 18px var(--serif);margin:0 0 12px}ol{margin:0;padding-left:24px;color:#4c4942;font-size:15px;line-height:1.65}li{padding-left:4px;margin:4px 0}.open{display:block;text-align:center;margin-top:24px;padding:14px 18px;border-radius:12px;background:var(--accent);color:#fff;text-decoration:none;font-weight:650;font-size:15px}.open:active{opacity:.82}
+    @media(min-width:700px){main{padding:34px 42px;border:1px solid var(--line);border-radius:22px;background:#f9f7f1}h1{font-size:34px}}
+  </style>
 </head>
 <body>
-  <header class="topbar">
-    <img src="icon.png" alt="" class="brand-icon">
-    <div class="brand">IMITATIO <span>· DE IMITATIONE CHRISTI</span></div>
-    <button id="offlineButton" class="offline-button" type="button">Download for offline</button>
-  </header>
   <main>
-    <div class="book-heading">
-      <p class="eyebrow">THOMAS À KEMPIS · TEXTUS LATINUS</p>
-      <h1>De imitatione Christi</h1>
-      <p class="author">Thomas a Kempis</p>
-    </div>
-    <section class="reader-tools" aria-label="Reading navigation">
-      <label for="chapterSelect">Go to chapter</label>
-      <select id="chapterSelect"></select>
-      <div id="offlineStatus" class="offline-status" role="status">Audio streams while you’re online.</div>
+    <h1>Add Imitatio to your phone</h1>
+    <p class="subtitle">DE IMITATIONE CHRISTI</p>
+    <section>
+      <h2>iPhone or iPad</h2>
+      <ol>
+        <li>Tap <strong>Open reader</strong> below. If asked, open the page in Safari.</li>
+        <li>In Safari, tap the <strong>Share</strong> button.</li>
+        <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
+        <li>Tap <strong>Add</strong>. Open Imitatio from its new Home Screen icon.</li>
+      </ol>
     </section>
-    <article id="reading" aria-live="off"><div class="loading">Loading the Latin text…</div></article>
+    <section>
+      <h2>Android</h2>
+      <ol>
+        <li>Tap <strong>Open reader</strong> below in Chrome.</li>
+        <li>Tap <strong>Install app</strong> in the browser prompt, or open Chrome’s menu and tap <strong>Install app</strong>.</li>
+        <li>Confirm the installation, then open Imitatio from your Home Screen or app list.</li>
+      </ol>
+    </section>
+    <a class="open" href="reader.html">Open reader</a>
   </main>
-  <section class="player" aria-label="Audio player">
-    <div class="player-location" id="playerLocation">Liber I · Caput 1</div>
-    <div class="controls">
-      <button id="previousButton" aria-label="Previous chapter" title="Previous chapter">‹</button>
-      <button id="playButton" aria-label="Play" title="Play">▶</button>
-      <button id="nextButton" aria-label="Next chapter" title="Next chapter">›</button>
-      <span id="timeLabel">0:00</span>
-      <input id="seekBar" type="range" min="0" max="1000" value="0" aria-label="Audio position">
-      <span id="durationLabel">0:00</span>
-    </div>
-    <div class="player-foot"><span id="playerMessage">LibriVox audio · Internet Archive</span><span>Audio continues while you read</span></div>
-  </section>
-  <dialog id="downloadDialog">
-    <form method="dialog" class="dialog-close"><button aria-label="Close">×</button></form>
-    <h2>Keep the book offline</h2>
-    <p>Download all 16 recordings to this device for offline listening. The download is about <strong>405 MB</strong>. Keep this page open until it finishes.</p>
-    <p class="storage-note" id="storageNote">Checking available storage…</p>
-    <progress id="downloadProgress" max="100" value="0"></progress>
-    <p id="downloadDetails">Audio is streamed when you’re online. The text and player are cached for offline access.</p>
-    <div class="dialog-actions">
-      <button id="startDownload" class="primary" type="button">Download all audio</button>
-      <button id="removeDownload" class="secondary" type="button">Remove offline audio</button>
-    </div>
-  </dialog>
-  <audio id="audio" preload="none" playsinline></audio>
-  <script src="app.js" defer></script>
 </body>
 </html>
