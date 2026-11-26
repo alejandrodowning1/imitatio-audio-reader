@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f5f1e8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Imitatio">
+  <meta name="description" content="Read De imitatione Christi while listening to its LibriVox recording, with synchronized Latin highlighting.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="stylesheet" href="style.css">
+  <title>Imitatio · De imitatione Christi</title>
+</head>
+<body>
+  <header class="topbar">
+    <img src="icon.png" alt="" class="brand-icon">
+    <div class="brand">IMITATIO <span>· DE IMITATIONE CHRISTI</span></div>
+    <button id="offlineButton" class="offline-button" type="button">Download for offline</button>
+  </header>
+  <main>
+    <div class="book-heading">
+      <p class="eyebrow">THOMAS À KEMPIS · TEXTUS LATINUS</p>
+      <h1>De imitatione Christi</h1>
+      <p class="author">Thomas a Kempis</p>
+    </div>
+    <section class="reader-tools" aria-label="Reading navigation">
+      <label for="chapterSelect">Go to chapter</label>
+      <select id="chapterSelect"></select>
+      <div id="offlineStatus" class="offline-status" role="status">Audio streams while you’re online.</div>
+    </section>
+    <article id="reading" aria-live="off"><div class="loading">Loading the Latin text…</div></article>
+  </main>
+  <section class="player" aria-label="Audio player">
+    <div class="player-location" id="playerLocation">Liber I · Caput 1</div>
+    <div class="controls">
+      <button id="previousButton" aria-label="Previous chapter" title="Previous chapter">‹</button>
+      <button id="playButton" aria-label="Play" title="Play">▶</button>
+      <button id="nextButton" aria-label="Next chapter" title="Next chapter">›</button>
+      <span id="timeLabel">0:00</span>
+      <input id="seekBar" type="range" min="0" max="1000" value="0" aria-label="Audio position">
+      <span id="durationLabel">0:00</span>
+    </div>
+    <div class="player-foot"><span id="playerMessage">LibriVox audio · Internet Archive</span><span>Audio continues while you read</span></div>
+  </section>
+  <dialog id="downloadDialog">
+    <form method="dialog" class="dialog-close"><button aria-label="Close">×</button></form>
+    <h2>Keep the book offline</h2>
+    <p>Download all 16 recordings to this device for offline listening. The download is about <strong>405 MB</strong>. Keep this page open until it finishes.</p>
+    <p class="storage-note" id="storageNote">Checking available storage…</p>
+    <progress id="downloadProgress" max="100" value="0"></progress>
+    <p id="downloadDetails">Audio is streamed when you’re online. The text and player are cached for offline access.</p>
+    <div class="dialog-actions">
+      <button id="startDownload" class="primary" type="button">Download all audio</button>
+      <button id="removeDownload" class="secondary" type="button">Remove offline audio</button>
+    </div>
+  </dialog>
+  <audio id="audio" preload="none" playsinline></audio>
+  <script src="app.js" defer></script>
+</body>
+</html>
